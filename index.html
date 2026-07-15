@@ -8,10 +8,27 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: "Meiryo", "Yu Gothic", sans-serif; background: #f8f8f8; color: #111; padding: 24px; }
 h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-.subtitle { font-size: 13px; color: #666; margin-bottom: 28px; }
+.subtitle { font-size: 13px; color: #666; margin-bottom: 20px; }
 .section { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
-.section-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }
+.section-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #333; }
+
+/* フィルター */
+.filter-area { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+.filter-btn { padding: 5px 13px; border-radius: 20px; border: 1.5px solid #6B3FA0; background: #fff; color: #6B3FA0; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
+.filter-btn:hover { background: #ede6f7; }
+.filter-btn.group-core { background: #2A78D6; color: #fff; border-color: #2A78D6; }
+.filter-btn.group-new  { background: #1BAF7A; color: #fff; border-color: #1BAF7A; }
+.filter-btn.active { background: #6B3FA0; color: #fff; }
+.filter-divider { width: 1px; height: 24px; background: #ddd; margin: 0 4px; }
+.filter-label { font-size: 12px; color: #888; margin-right: 4px; }
+.name-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.name-tag { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 16px; border: 1.5px solid; font-size: 12px; cursor: pointer; transition: opacity .15s; user-select: none; }
+.name-tag.off { opacity: 0.3; }
+.name-tag .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* チャート */
 .chart-wrap { position: relative; width: 100%; }
+
 /* ヒートマップ */
 .heatmap { overflow-x: auto; }
 .hm-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
@@ -30,17 +47,38 @@ h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 
 <!-- 積み上げ棒グラフ -->
 <div class="section">
-  <div class="section-title">時間帯別 担当者ごとの処理件数（積み上げ棒グラフ）</div>
-  <div class="chart-wrap" style="height:420px;">
+  <div class="section-title">① 時間帯別 処理件数（担当者フィルター付き）</div>
+
+  <!-- グループ・一括操作ボタン -->
+  <div class="filter-area">
+    <span class="filter-label">グループ：</span>
+    <button class="filter-btn group-btn" id="btnCore" onclick="selectGroup('core')">社員・コアOP</button>
+    <button class="filter-btn group-btn" id="btnNew" onclick="selectGroup('new')">OP・新規参画者</button>
+    <div class="filter-divider"></div>
+    <span class="filter-label">一括：</span>
+    <button class="filter-btn" id="btnAll" onclick="selectAll()">全員表示</button>
+    <button class="filter-btn" id="btnNone" onclick="selectNone()">全員非表示</button>
+    <div class="filter-divider"></div>
+    <span class="filter-label">個別選択 →</span>
+  </div>
+
+  <!-- 担当者タグ -->
+  <div class="name-tags" id="nameTags"></div>
+
+  <div class="chart-wrap" style="height:440px;">
     <canvas id="stackedChart"></canvas>
   </div>
 </div>
 
 <!-- ヒートマップ -->
 <div class="section">
-  <div class="section-title">ヒートマップ：時間帯 × 担当者（件数・濃さで強度を表現）</div>
+  <div class="section-title">② ヒートマップ：時間帯 × 担当者</div>
   <div class="heatmap">
     <table class="hm-table" id="heatmapTable"></table>
+  </div>
+</div>
+  <div class="simple-wrap">
+    <table class="s-table" id="simpleTable"></table>
   </div>
 </div>
 
@@ -71,105 +109,177 @@ const rawData = {
   '黒川 良江':   [0,2,2,0,5,20,1,1,0,0,0,13,15,15,4,17,1,0,9,5],
 };
 
-const names = Object.keys(rawData);
+const names = Object.keys(rawData).filter(n => rawData[n].reduce((a,b)=>a+b,0) > 0);
 
-// カラーパレット（21色）
-const palette = [
-  '#6B3FA0','#E34948','#1BAF7A','#EDA100','#2A78D6',
-  '#C0498A','#00897B','#F4511E','#8E24AA','#3949AB',
-  '#00ACC1','#7CB342','#FB8C00','#D81B60','#43A047',
-  '#1E88E5','#B0BEC5','#6D4C41','#546E7A','#E91E63','#009688'
-];
+// グループ定義
+const groupNew  = ['一木 尊仁','林 亜由美','田上 由美','板井 彩','島﨑千佳'];
+const groupCore = names.filter(n => !groupNew.includes(n));
 
-// ===== 積み上げ棒グラフ =====
-const datasets = names.map((name, i) => ({
+// 色：社員・コアOP = 青系、OP・新規参画者 = 緑系
+function getColor(name) {
+  return groupNew.includes(name) ? '#1BAF7A' : '#2A78D6';
+}
+
+// 表示状態管理
+const visible = {};
+names.forEach(n => { visible[n] = true; });
+
+// ===== 担当者タグ生成 =====
+const tagContainer = document.getElementById('nameTags');
+names.forEach((name, i) => {
+  const color = palette[i % palette.length];
+  const tag = document.createElement('div');
+  tag.className = 'name-tag';
+  tag.id = 'tag-' + i;
+  const color = getColor(name);
+  const groupLabel = groupNew.includes(name) ? 'OP・新規' : '社員・コアOP';
+  tag.style.borderColor = color;
+  tag.style.color = color;
+  tag.innerHTML = `<div class="dot" style="background:\${color}"></div>\${name}`;
+  tag.onclick = () => toggleName(name, i, color, tag);
+  tagContainer.appendChild(tag);
+});
+
+function toggleName(name, i, color, tag) {
+  visible[name] = !visible[name];
+  tag.classList.toggle('off', !visible[name]);
+  updateChart();
+}
+
+function selectGroup(group) {
+  // 全員非表示にしてからグループだけON
+  names.forEach((n, i) => {
+    visible[n] = false;
+    document.getElementById('tag-' + i).classList.add('off');
+  });
+  const targets = group === 'new' ? groupNew : groupCore;
+  names.forEach((n, i) => {
+    if (targets.includes(n)) {
+      visible[n] = true;
+      document.getElementById('tag-' + i).classList.remove('off');
+    }
+  });
+  // グループボタンのスタイル更新
+  document.getElementById('btnCore').className = 'filter-btn group-btn' + (group === 'core' ? ' group-core' : '');
+  document.getElementById('btnNew').className  = 'filter-btn group-btn' + (group === 'new'  ? ' group-new'  : '');
+  updateChart();
+}
+
+function selectAll() {
+  names.forEach((n, i) => {
+    visible[n] = true;
+    document.getElementById('tag-' + i).classList.remove('off');
+  });
+  document.getElementById('btnCore').className = 'filter-btn group-btn';
+  document.getElementById('btnNew').className  = 'filter-btn group-btn';
+  updateChart();
+}
+
+function selectNone() {
+  names.forEach((n, i) => {
+    visible[n] = false;
+    document.getElementById('tag-' + i).classList.add('off');
+  });
+  document.getElementById('btnCore').className = 'filter-btn group-btn';
+  document.getElementById('btnNew').className  = 'filter-btn group-btn';
+  updateChart();
+}
+
+// ===== 総件数ラベルプラグイン =====
+const totalLabelPlugin = {
+  id: 'totalLabel',
+  afterDatasetsDraw(chart) {
+    const { ctx, data, scales: { x, y } } = chart;
+    const totals = times.map((_, ti) =>
+      names.filter(n => visible[n]).reduce((s, n) => s + rawData[n][ti], 0)
+    );
+    ctx.save();
+    ctx.font = 'bold 11px Meiryo, sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'center';
+    totals.forEach((total, ti) => {
+      if (total === 0) return;
+      const xPos = x.getPixelForValue(ti);
+      const yPos = y.getPixelForValue(total) - 6;
+      ctx.fillText(total, xPos, yPos);
+    });
+    ctx.restore();
+  }
+};
+
+// ===== チャート生成 =====
+const ctx = document.getElementById('stackedChart').getContext('2d');
+const chartDatasets = names.map((name, i) => ({
   label: name,
   data: rawData[name],
-  backgroundColor: palette[i % palette.length],
+  backgroundColor: getColor(name),
   borderWidth: 0,
 }));
 
-new Chart(document.getElementById('stackedChart'), {
+const chart = new Chart(ctx, {
   type: 'bar',
-  data: { labels: times, datasets },
+  data: { labels: times, datasets: chartDatasets },
   options: {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        display: true,
-        position: 'bottom',
-        labels: { font: { size: 10 }, padding: 8, boxWidth: 12 }
-      },
+      legend: { display: false },
       tooltip: {
         callbacks: {
-          label: ctx => `${ctx.dataset.label}：${ctx.parsed.y}件`,
-          footer: items => {
-            const total = items.reduce((s, i) => s + i.parsed.y, 0);
-            return `合計：${total}件`;
-          }
+          label: c => `${c.dataset.label}：${c.parsed.y}件`,
+          footer: items => `合計：${items.reduce((s,i)=>s+i.parsed.y,0)}件`
         }
       }
     },
     scales: {
-      x: {
-        stacked: true,
-        ticks: { font: { size: 10 }, color: '#555' },
-        grid: { display: false }
-      },
-      y: {
-        stacked: true,
-        ticks: { font: { size: 10 }, color: '#555' },
-        grid: { color: '#eee' },
-        title: { display: true, text: '処理件数', font: { size: 11 }, color: '#555' }
-      }
+      x: { stacked: true, ticks: { font:{size:11}, color:'#555' }, grid:{display:false} },
+      y: { stacked: true, ticks: { font:{size:10}, color:'#555' }, grid:{color:'#eee'},
+           title:{display:true,text:'処理件数',font:{size:11},color:'#555'} }
     }
-  }
+  },
+  plugins: [totalLabelPlugin]
 });
 
-// ===== ヒートマップ =====
-const maxVal = Math.max(...names.flatMap(n => rawData[n]));
-
-function cellColor(v) {
-  if (v === 0) return { bg: '#f8f8f8', text: '#ccc' };
-  const intensity = v / maxVal;
-  const r = Math.round(107 + (255 - 107) * (1 - intensity));
-  const g = Math.round(63  + (255 - 63)  * (1 - intensity));
-  const b = Math.round(160 + (255 - 160) * (1 - intensity));
-  const textColor = intensity > 0.5 ? '#fff' : '#333';
-  return { bg: `rgb(${r},${g},${b})`, text: textColor };
+function updateChart() {
+  chart.data.datasets.forEach((ds, i) => {
+    const name = names[i];
+    ds.data = visible[name] ? rawData[name] : new Array(times.length).fill(0);
+  });
+  chart.update();
 }
 
-const table = document.getElementById('heatmapTable');
-
-// ヘッダー行
-let html = '<thead><tr><th class="name-col">担当者</th>';
-times.forEach(t => { html += `<th>${t}</th>`; });
-html += '<th>合計</th></tr></thead><tbody>';
-
-// データ行
-const colTotals = new Array(times.length).fill(0);
+// ===== ② ヒートマップ =====
+const maxVal = Math.max(...names.flatMap(n => rawData[n]));
+function cellColor(v) {
+  if (v === 0) return { bg:'#f8f8f8', text:'#ccc' };
+  const t = v / maxVal;
+  const r = Math.round(107+(255-107)*(1-t));
+  const g = Math.round(63 +(255-63) *(1-t));
+  const b = Math.round(160+(255-160)*(1-t));
+  return { bg:`rgb(${r},${g},${b})`, text: t>0.5?'#fff':'#333' };
+}
+const hmTable = document.getElementById('heatmapTable');
+const colT = new Array(times.length).fill(0);
+let hmHtml = '<thead><tr><th class="name-col">担当者</th>';
+times.forEach(t => { hmHtml += `<th>${t}</th>`; });
+hmHtml += '<th>合計</th></tr></thead><tbody>';
 names.forEach(name => {
   const row = rawData[name];
-  const rowTotal = row.reduce((a, b) => a + b, 0);
-  if (rowTotal === 0) return; // 0件の人は非表示
-  html += `<tr><td class="name">${name}</td>`;
-  row.forEach((v, ti) => {
-    colTotals[ti] += v;
-    const { bg, text } = cellColor(v);
-    const disp = v === 0 ? '' : v;
-    html += `<td style="background:${bg};color:${text};">${disp}</td>`;
+  const rt = row.reduce((a,b)=>a+b,0);
+  if (!rt) return;
+  hmHtml += `<tr><td class="name">${name}</td>`;
+  row.forEach((v,ti) => {
+    colT[ti] += v;
+    const {bg,text} = cellColor(v);
+    hmHtml += `<td style="background:${bg};color:${text};">${v||''}</td>`;
   });
-  html += `<td class="total-col">${rowTotal}</td></tr>`;
+  hmHtml += `<td class="total-col">${rt}</td></tr>`;
 });
-
-// 合計行
-const grandTotal = colTotals.reduce((a, b) => a + b, 0);
-html += '<tr class="total-row"><td class="name" style="background:#6B3FA0;color:#fff;">合計</td>';
-colTotals.forEach(v => { html += `<td>${v}</td>`; });
-html += `<td>${grandTotal}</td></tr>`;
-html += '</tbody>';
-table.innerHTML = html;
+const gt = colT.reduce((a,b)=>a+b,0);
+hmHtml += '<tr class="total-row"><td class="name" style="background:#6B3FA0;color:#fff;">合計</td>';
+colT.forEach(v => { hmHtml += `<td>${v}</td>`; });
+hmHtml += `<td>${gt}</td></tr></tbody>`;
+hmTable.innerHTML = hmHtml;
 </script>
 </body>
 </html>
