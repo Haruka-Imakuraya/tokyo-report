@@ -94,7 +94,10 @@ var raw = {
 };
 
 var newGroup = ['一木 尊仁','林 亜由美','田上 由美','板井 彩','島﨑千佳'];
-var names = Object.keys(raw).filter(function(n){ return raw[n].reduce(function(a,b){return a+b;},0) > 0; });
+// 社員・コアOP → OP・新規参画者 の順に並び替え
+var allNames = Object.keys(raw).filter(function(n){ return raw[n].reduce(function(a,b){return a+b;},0) > 0; });
+var names = allNames.filter(function(n){ return newGroup.indexOf(n) < 0; })
+            .concat(allNames.filter(function(n){ return newGroup.indexOf(n) >= 0; }));
 
 function getColor(n){ return newGroup.indexOf(n) >= 0 ? '#1BAF7A' : '#2A78D6'; }
 
