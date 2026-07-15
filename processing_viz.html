@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>時間帯別 担当者処理件数｜東京支社 7/13</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Meiryo", "Yu Gothic", sans-serif; background: #f8f8f8; color: #111; padding: 24px; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: #666; margin-bottom: 28px; }
+.section { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.section-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }
+.chart-wrap { position: relative; width: 100%; }
+/* ヒートマップ */
+.heatmap { overflow-x: auto; }
+.hm-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.hm-table th { background: #6B3FA0; color: #fff; padding: 5px 8px; text-align: center; font-weight: 600; }
+.hm-table th.name-col { text-align: left; min-width: 100px; }
+.hm-table td { padding: 4px 6px; text-align: center; border: 1px solid #eee; min-width: 42px; font-size: 11px; font-weight: 500; }
+.hm-table td.name { text-align: left; font-weight: 600; padding-left: 10px; background: #f5f5f5; }
+.total-row td { background: #6B3FA0 !important; color: #fff !important; font-weight: 700; }
+.total-col { background: #ede6f7 !important; font-weight: 700; color: #6B3FA0 !important; }
+</style>
+</head>
+<body>
+
+<h1>時間帯別 担当者処理件数</h1>
+<p class="subtitle">東京支社　7/13（月）　セカンド入力　｜　D列（処理数）の集計</p>
+
+<!-- 積み上げ棒グラフ -->
+<div class="section">
+  <div class="section-title">時間帯別 担当者ごとの処理件数（積み上げ棒グラフ）</div>
+  <div class="chart-wrap" style="height:420px;">
+    <canvas id="stackedChart"></canvas>
+  </div>
+</div>
+
+<!-- ヒートマップ -->
+<div class="section">
+  <div class="section-title">ヒートマップ：時間帯 × 担当者（件数・濃さで強度を表現）</div>
+  <div class="heatmap">
+    <table class="hm-table" id="heatmapTable"></table>
+  </div>
+</div>
+
+<script>
+const times = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'];
+
+const rawData = {
+  '一木 尊仁':    [0,7,11,18,12,14,3,1,0,16,11,11,12,8,4,11,2,1,10,0],
+  '上野 明日香':  [0,0,0,0,0,0,0,0,0,0,0,4,4,7,6,11,15,10,10,3],
+  '中村 桃彩':   [0,0,0,0,0,0,0,0,0,0,0,0,3,2,1,1,0,2,6,0],
+  '井上 茉優':   [0,0,0,0,2,0,0,1,2,1,0,7,8,7,3,4,1,0,11,1],
+  '今藏屋 遼':   [0,15,11,3,0,0,0,0,4,0,3,9,4,4,2,0,0,6,7,2],
+  '信川 大河':   [7,0,0,14,26,9,8,3,2,6,0,9,0,0,3,5,1,0,0,5],
+  '南 直斗':     [0,0,0,0,2,23,1,0,0,0,0,14,16,9,0,3,0,11,5,2],
+  '島﨑千佳':    [0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  '日髙 駿一':   [0,0,4,20,8,24,2,15,22,32,9,0,0,1,1,15,0,0,0,0],
+  '板井 彩':     [0,5,14,5,17,11,0,0,0,0,0,0,1,0,1,8,11,14,15,1],
+  '林 亜由美':   [0,17,3,0,7,8,2,0,0,0,0,0,0,0,1,12,2,0,13,1],
+  '江崎 凜々子': [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
+  '清原 悠生':   [2,9,0,0,0,0,0,0,0,6,9,4,8,15,1,10,0,2,9,3],
+  '田上 由美':   [0,0,9,13,12,15,10,0,0,0,0,3,7,10,5,9,0,3,12,1],
+  '田崎 めぐみ': [1,8,0,0,0,0,0,0,0,0,0,0,1,12,0,0,0,0,20,5],
+  '菅野 美優紀': [0,13,17,12,16,20,1,0,0,2,0,1,0,5,3,8,0,0,0,0],
+  '落合 遥菜':   [0,7,15,13,22,15,1,0,0,0,0,4,6,13,2,15,1,0,15,3],
+  '諸石 奈々':   [0,0,3,0,0,0,0,0,0,0,0,0,2,10,1,13,0,0,9,2],
+  '道城 有紗':   [0,0,8,5,0,1,10,2,8,0,0,7,0,1,4,1,1,0,4,3],
+  '鎌田 もも':   [0,4,0,0,0,0,0,0,0,0,0,3,0,13,4,3,0,0,5,4],
+  '黒川 良江':   [0,2,2,0,5,20,1,1,0,0,0,13,15,15,4,17,1,0,9,5],
+};
+
+const names = Object.keys(rawData);
+
+// カラーパレット（21色）
+const palette = [
+  '#6B3FA0','#E34948','#1BAF7A','#EDA100','#2A78D6',
+  '#C0498A','#00897B','#F4511E','#8E24AA','#3949AB',
+  '#00ACC1','#7CB342','#FB8C00','#D81B60','#43A047',
+  '#1E88E5','#B0BEC5','#6D4C41','#546E7A','#E91E63','#009688'
+];
+
+// ===== 積み上げ棒グラフ =====
+const datasets = names.map((name, i) => ({
+  label: name,
+  data: rawData[name],
+  backgroundColor: palette[i % palette.length],
+  borderWidth: 0,
+}));
+
+new Chart(document.getElementById('stackedChart'), {
+  type: 'bar',
+  data: { labels: times, datasets },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: { font: { size: 10 }, padding: 8, boxWidth: 12 }
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}：${ctx.parsed.y}件`,
+          footer: items => {
+            const total = items.reduce((s, i) => s + i.parsed.y, 0);
+            return `合計：${total}件`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        ticks: { font: { size: 10 }, color: '#555' },
+        grid: { display: false }
+      },
+      y: {
+        stacked: true,
+        ticks: { font: { size: 10 }, color: '#555' },
+        grid: { color: '#eee' },
+        title: { display: true, text: '処理件数', font: { size: 11 }, color: '#555' }
+      }
+    }
+  }
+});
+
+// ===== ヒートマップ =====
+const maxVal = Math.max(...names.flatMap(n => rawData[n]));
+
+function cellColor(v) {
+  if (v === 0) return { bg: '#f8f8f8', text: '#ccc' };
+  const intensity = v / maxVal;
+  const r = Math.round(107 + (255 - 107) * (1 - intensity));
+  const g = Math.round(63  + (255 - 63)  * (1 - intensity));
+  const b = Math.round(160 + (255 - 160) * (1 - intensity));
+  const textColor = intensity > 0.5 ? '#fff' : '#333';
+  return { bg: `rgb(${r},${g},${b})`, text: textColor };
+}
+
+const table = document.getElementById('heatmapTable');
+
+// ヘッダー行
+let html = '<thead><tr><th class="name-col">担当者</th>';
+times.forEach(t => { html += `<th>${t}</th>`; });
+html += '<th>合計</th></tr></thead><tbody>';
+
+// データ行
+const colTotals = new Array(times.length).fill(0);
+names.forEach(name => {
+  const row = rawData[name];
+  const rowTotal = row.reduce((a, b) => a + b, 0);
+  if (rowTotal === 0) return; // 0件の人は非表示
+  html += `<tr><td class="name">${name}</td>`;
+  row.forEach((v, ti) => {
+    colTotals[ti] += v;
+    const { bg, text } = cellColor(v);
+    const disp = v === 0 ? '' : v;
+    html += `<td style="background:${bg};color:${text};">${disp}</td>`;
+  });
+  html += `<td class="total-col">${rowTotal}</td></tr>`;
+});
+
+// 合計行
+const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+html += '<tr class="total-row"><td class="name" style="background:#6B3FA0;color:#fff;">合計</td>';
+colTotals.forEach(v => { html += `<td>${v}</td>`; });
+html += `<td>${grandTotal}</td></tr>`;
+html += '</tbody>';
+table.innerHTML = html;
+</script>
+</body>
+</html>
